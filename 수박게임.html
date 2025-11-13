@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>수박게임 🍉 (2단계 랜덤 + 번갈이 색상)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #d9f9d9;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: "Pretendard", sans-serif;
+    }
+    #score {
+      position: absolute;
+      top: 10px;
+      left: 20px;
+      font-size: 24px;
+      color: #333;
+      font-weight: bold;
+    }
+    canvas {
+      background: #e8ffe8;
+      border: 3px solid #3a3a3a;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="score">점수: 0</div>
+  <canvas id="game"></canvas>
+
+  <script>
+    const { Engine, Render, Runner, Bodies, Composite, Events } = Matter;
+
+    const engine = Engine.create();
+    const world = engine.world;
+
+    const width = 400, height = 600;
+    const canvas = document.getElementById("game");
+
+    const render = Render.create({
+      canvas,
+      engine,
+      options: {
+        width,
+        height,
+        wireframes: false,
+        background: "#e8ffe8"
+      }
+    });
+
+    Render.run(render);
+    const runner = Runner.create();
+    Runner.run(runner, engine);
+
+    // 벽, 바닥 설정
+    const ground = Bodies.rectangle(width / 2, height, width, 40, { isStatic: true });
+    const leftWall = Bodies.rectangle(0, height / 2, 20, height, { isStatic: true });
+    const rightWall = Bodies.rectangle(width, height / 2, 20, height, { isStatic: true });
+    Composite.add(world, [ground, leftWall, rightWall]);
+
+    // 과일 종류
+    const fruitTypes = [
+      { color: "#ff9999", r: 15, score: 1 }, // 빨강 - 가장 작음
+      { color: "#ffcc66", r: 25, score: 2 }, // 노랑 - 두 번째
+      { color: "#99ff99", r: 35, score: 4 },
+      { color: "#66ccff", r: 50, score: 8 },
+      { color: "#ff66cc", r: 70, score: 16 },
+      { color: "#33cc33", r: 100, score: 32 } // 수박
+    ];
+
+    let mouseX = width / 2;
+    let score = 0;
+    let redTurn = true; // 빨강 ↔ 노랑 번갈이
+    let currentFruit = randomFruit();
+
+    // 🔸 빨강 ↔ 노랑 번갈이, 크기는 두 가지 중 랜덤
+    function randomFruit() {
+      const sizeIndex = Math.random() < 0.5 ? 0 : 1; // 0=작은, 1=조금 큰
+      const base = redTurn ? fruitTypes[0] : fruitTypes[1]; // 색상 선택
+      redTurn = !redTurn; // 다음 클릭엔 반대색
+      return { ...base, r: fruitTypes[sizeIndex].r, x: width / 2, y: 50 };
+    }
+
+    // 마우스 움직임 → 현재 과일 위치
+    document.addEventListener("mousemove", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mouseX = e.clientX - rect.left;
+    });
+
+    // 클릭 → 과일 생성
+    document.addEventListener("click", () => {
+      const f = currentFruit;
+      const circle = Bodies.circle(mouseX, 60, f.r, {
+        restitution: 0.3,
+        friction: 0.1,
+        render: { fillStyle: f.color }
+      });
+      circle.fruitData = f;
+      Composite.add(world, circle);
+
+      // 다음 과일 준비
+      currentFruit = randomFruit();
+    });
+
+    // 같은 색상끼리 부딪히면 합치기
+    Events.on(engine, "collisionStart", (event) => {
+      const pairs = event.pairs;
+      for (let pair of pairs) {
+        const { bodyA, bodyB } = pair;
+        const a = bodyA.fruitData;
+        const b = bodyB.fruitData;
+
+        if (a && b && a.color === b.color) {
+          const nextIndex = fruitTypes.findIndex(f => f.color === a.color) + 1;
+          if (nextIndex < fruitTypes.length) {
+            const pos = {
+              x: (bodyA.position.x + bodyB.position.x) / 2,
+              y: (bodyA.position.y + bodyB.position.y) / 2
+            };
+
+            Composite.remove(world, [bodyA, bodyB]);
+
+            const newFruit = fruitTypes[nextIndex];
+            const circle = Bodies.circle(pos.x, pos.y, newFruit.r, {
+              restitution: 0.3,
+              friction: 0.1,
+              render: { fillStyle: newFruit.color }
+            });
+            circle.fruitData = newFruit;
+            Composite.add(world, circle);
+
+            score += newFruit.score;
+            document.getElementById("score").innerText = `점수: ${score}`;
+          }
+        }
+      }
+    });
+
+    // 현재 과일 미리보기 (위쪽 반투명)
+    const ctx = render.context;
+    (function drawGuide() {
+      requestAnimationFrame(drawGuide);
+      ctx.save();
+      ctx.fillStyle = currentFruit.color + "88";
+      ctx.beginPath();
+      ctx.arc(mouseX, 60, currentFruit.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    })();
+  </script>
+</body>
+</html>
